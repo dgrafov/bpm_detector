@@ -21,12 +21,14 @@ private:
     gboolean busCallHandler( GstBus *bus,
                              GstMessage *msg,
                              gpointer data);
-
-    std::shared_ptr< GMainLoop > loopSp;
-    std::shared_ptr< GstElement > pipelineSp;
-    std::shared_ptr< GstElement > sourceSp;
-    std::shared_ptr< GstElement > decoderSp;
-    std::shared_ptr< GstElement > sinkSp;
+    //TODO: unique_ptr
+    std::shared_ptr< GMainLoop > loop;
+    std::shared_ptr< GstElement > pipeline;
+    GstElement* source;
+    GstElement* decoder;
+    GstElement* converter;
+    GstElement* bpmDetector;
+    GstElement* sink;
 
     guint busWatchId;
 };
