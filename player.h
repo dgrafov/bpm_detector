@@ -13,24 +13,13 @@ public:
     Player( );
     ~Player( );
     void startPlayer( );
+    gboolean busCallHandler( GstMessage *msg );
+
 private:
-    static gboolean busCallHandlerWrapper ( GstBus *bus,
-                                            GstMessage *msg,
-                                            gpointer data );
-
-    gboolean busCallHandler( GstBus *bus,
-                             GstMessage *msg,
-                             gpointer data);
     //TODO: unique_ptr
-    std::shared_ptr< GMainLoop > loop;
-    std::shared_ptr< GstElement > pipeline;
-    GstElement* source;
-    GstElement* decoder;
-    GstElement* converter;
-    GstElement* bpmDetector;
-    GstElement* sink;
-
-    guint busWatchId;
+    std::shared_ptr< GMainLoop > mLoop;
+    std::shared_ptr< GstElement > mPipeline;
+    guint mBusWatchId;
 };
 
 

@@ -6,90 +6,97 @@
 
 using namespace std;
 
+//Helpers
+static gboolean busCallHandlerWrapper( GstBus*, GstMessage* msg, gpointer data )
+{
+    Player * player = static_cast< Player * >( data );
+    return player->busCallHandler( msg );
+}
+
+
+//Player methods
 void Player::startPlayer( )
 {
-    /* Set up the pipeline */
-    g_object_set ( G_OBJECT( source ), "location", "sample.mp3", NULL);
+    // Set up the pipeline
+    g_object_set ( G_OBJECT( mPipeline.get( ) ), "uri", "file:///home/grafov/workspace/sample.mp3", NULL );
 
-    /* we add a message handler */
+    // Add a bus message handler
     //TODO: unique_ptr
     shared_ptr< GstBus > bus(
-            gst_pipeline_get_bus( GST_PIPELINE ( pipeline.get( ) ) ),
+            gst_pipeline_get_bus( GST_PIPELINE ( mPipeline.get( ) ) ),
             gst_object_unref );
-    busWatchId = gst_bus_add_watch (
+    mBusWatchId = gst_bus_add_watch (
             bus.get( ),
-            busCallHandlerWrapper, 
-            static_cast< gpointer >( this ) );
+            busCallHandlerWrapper,
+            static_cast< gpointer >( this ) )
+    ;
+    // Create a custom sink for the playbin
+    GstElement* bin = gst_bin_new ( "bin" );
+    GstElement* bpmDetector = gst_element_factory_make ( "bpmdetect", "detector" );
+    GstElement* sink = gst_element_factory_make ( "fakesink", "sink" );
 
-    /* we add all elements into the pipeline */
-    gst_bin_add_many( GST_BIN ( pipeline.get( ) ),
-            source,
-            decoder,
-            converter,
-            bpmDetector,
-            sink,
-            NULL );
+    if ( !bin || !bpmDetector || ! sink )
+    {
+        DEBUG_PRINT( DL_ERROR, "Custom sink for the playbin could not be created. Player not started.\n" );
+        throw;
+    }
 
-    gst_element_link_many(
-            source,
-            decoder,
-            converter,
-            bpmDetector,
-            sink,
-            NULL );
-    gst_element_set_state ( pipeline.get( ), GST_STATE_PLAYING );
+    gst_bin_add_many( GST_BIN( bin ), bpmDetector, sink, NULL );
+    gst_element_link_many( bpmDetector, sink, NULL );
+
+    //TODO unique_ptr
+    GstPad* pad = gst_element_get_static_pad ( bpmDetector, "sink" );
+    GstPad* ghost_pad = gst_ghost_pad_new ( "sink", pad );
+    gst_pad_set_active ( ghost_pad, TRUE );
+    gst_element_add_pad ( bin, ghost_pad );
+    gst_object_unref ( pad );
+
+    // Set custom sink to the playbin
+    g_object_set( GST_OBJECT( mPipeline.get( ) ), "audio-sink", bin, NULL );
+
+    // Start playing
+    gst_element_set_state ( mPipeline.get( ), GST_STATE_PLAYING );
 
     DEBUG_PRINT( DL_INFO, "Starting playback\n" );
 
-    g_main_loop_run ( loop.get( ) );
+    g_main_loop_run ( mLoop.get( ) );
 }
 
+//TODO constructor shouldn't throw!
 Player::Player( )
 {
     gst_init ( NULL, NULL );
 
-    loop.reset( g_main_loop_new( NULL, FALSE ), g_main_loop_unref );
-    pipeline.reset( gst_pipeline_new( "bpm-player" ), gst_object_unref );
-   
-    source = gst_element_factory_make( "filesrc", "source" );
+    mLoop.reset( g_main_loop_new( NULL, FALSE ), g_main_loop_unref );
 
-    decoder = gst_element_factory_make ( "mad", "decoder" );
-    converter = gst_element_factory_make ( "audioconvert", "converter" );
-    bpmDetector = gst_element_factory_make ( "bpmdetect", "detector" );
-    sink = gst_element_factory_make ( "fakesink", "audiosink" );
-
-    if ( !loop ||
-         !pipeline  ||
-         !source ||
-         !decoder ||
-         !converter ||
-         !bpmDetector ||
-         !sink )
+    if ( !mLoop )
     {
-        DEBUG_PRINT( DL_ERROR, "One of pipeline elements could not be created. Player not started.\n" );
+        DEBUG_PRINT( DL_ERROR, "Main loop couldn't be created\n" );
+        throw;
+    }
+
+    mPipeline.reset( gst_element_factory_make( "playbin", "pipeline" ), gst_object_unref );
+
+    if ( !mPipeline )
+    {
+        DEBUG_PRINT( DL_ERROR, "Playbin could not be created.\n" );
         throw;
     }
 }
 
 Player::~Player( ) {
-    gst_element_set_state (pipeline.get(), GST_STATE_NULL);
-    g_source_remove (busWatchId);
+    gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
+    g_source_remove ( mBusWatchId );
 }
 
-gboolean Player::busCallHandlerWrapper( GstBus* bus, GstMessage* msg, gpointer data )
-{
-    Player * player = static_cast< Player * >( data );
-    return player->busCallHandler( bus, msg, player->loop.get( ) );
-}
 
-gboolean Player::busCallHandler( GstBus* bus, GstMessage* msg, gpointer data )
-{
-    GMainLoop *loop = static_cast< GMainLoop * >( data );
 
+gboolean Player::busCallHandler( GstMessage* msg )
+{
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
         DEBUG_PRINT( DL_INFO, "End of stream\n" );
-        g_main_loop_quit ( loop );
+        g_main_loop_quit ( mLoop.get( ) );
         break;
     case GST_MESSAGE_TAG:
     {
@@ -111,7 +118,7 @@ gboolean Player::busCallHandler( GstBus* bus, GstMessage* msg, gpointer data )
         g_free ( debug );
         DEBUG_PRINT( DL_ERROR, "Error: %s\n", error->message );
         g_error_free ( error );
-        g_main_loop_quit ( loop );
+        g_main_loop_quit ( mLoop.get( ) );
         break;
     default:
        break;
