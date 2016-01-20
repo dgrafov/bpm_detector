@@ -15,14 +15,29 @@ static gboolean busCallHandlerWrapper( GstBus*, GstMessage* msg, gpointer data )
 
 
 //Player methods
+//TODO create init method separate from start
 void Player::startPlayer( )
 {
+    gst_init ( NULL, NULL );
+
+    mPipeline.reset( gst_element_factory_make( "playbin", "pipeline" ) );
+
+    if ( !mLoop )
+    {
+        DEBUG_PRINT( DL_ERROR, "Main loop couldn't be created\n" );
+        throw;
+    }
+
+    if ( !mPipeline )
+    {
+        DEBUG_PRINT( DL_ERROR, "Playbin could not be created.\n" );
+        throw;
+    }
     // Set up the pipeline
     g_object_set ( G_OBJECT( mPipeline.get( ) ), "uri", "file:///home/grafov/workspace/sample.mp3", NULL );
 
     // Add a bus message handler
-    //TODO: unique_ptr
-    shared_ptr< GstBus > bus(
+    unique_ptr< GstBus, void( * )( gpointer ) > bus(
             gst_pipeline_get_bus( GST_PIPELINE ( mPipeline.get( ) ) ),
             gst_object_unref );
     mBusWatchId = gst_bus_add_watch (
@@ -44,12 +59,12 @@ void Player::startPlayer( )
     gst_bin_add_many( GST_BIN( bin ), bpmDetector, sink, NULL );
     gst_element_link_many( bpmDetector, sink, NULL );
 
-    //TODO unique_ptr
-    GstPad* pad = gst_element_get_static_pad ( bpmDetector, "sink" );
-    GstPad* ghost_pad = gst_ghost_pad_new ( "sink", pad );
+    unique_ptr< GstPad, void( * )( gpointer) > pad( 
+        gst_element_get_static_pad ( bpmDetector, "sink" ),
+        gst_object_unref );
+    GstPad* ghost_pad = gst_ghost_pad_new ( "sink", pad.get( ) );
     gst_pad_set_active ( ghost_pad, TRUE );
     gst_element_add_pad ( bin, ghost_pad );
-    gst_object_unref ( pad );
 
     // Set custom sink to the playbin
     g_object_set( GST_OBJECT( mPipeline.get( ) ), "audio-sink", bin, NULL );
@@ -62,27 +77,10 @@ void Player::startPlayer( )
     g_main_loop_run ( mLoop.get( ) );
 }
 
-//TODO constructor shouldn't throw!
 Player::Player( )
-{
-    gst_init ( NULL, NULL );
-
-    mLoop.reset( g_main_loop_new( NULL, FALSE ), g_main_loop_unref );
-
-    if ( !mLoop )
-    {
-        DEBUG_PRINT( DL_ERROR, "Main loop couldn't be created\n" );
-        throw;
-    }
-
-    mPipeline.reset( gst_element_factory_make( "playbin", "pipeline" ), gst_object_unref );
-
-    if ( !mPipeline )
-    {
-        DEBUG_PRINT( DL_ERROR, "Playbin could not be created.\n" );
-        throw;
-    }
-}
+    : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
+    , mPipeline( NULL, gst_object_unref )
+{}
 
 Player::~Player( ) {
     gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);

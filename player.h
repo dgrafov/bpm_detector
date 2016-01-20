@@ -16,9 +16,8 @@ public:
     gboolean busCallHandler( GstMessage *msg );
 
 private:
-    //TODO: unique_ptr
-    std::shared_ptr< GMainLoop > mLoop;
-    std::shared_ptr< GstElement > mPipeline;
+    std::unique_ptr< GMainLoop, void( * )( GMainLoop* ) > mLoop;
+    std::unique_ptr< GstElement, void( * )( gpointer )  > mPipeline;
     guint mBusWatchId;
 };
 
