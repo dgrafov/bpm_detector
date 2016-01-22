@@ -1,9 +1,11 @@
 #include "BpmCalculator.h"
-#include "debug/debug.h"
+#include "debug/DebugPrint.h"
 
 
 #include <exception>
 #include <memory>
+#include <algorithm>
+#include <math.h>
 
 using namespace std;
 
@@ -14,11 +16,10 @@ static gboolean busCallHandlerWrapper( GstBus*, GstMessage* msg, gpointer data )
     return calc->busCallHandler( msg );
 }
 
-
-//Player methods
+//Class  methods
 //TODO create init method separate from start
 //TODO think if you really need exceptions here
-void BpmCalculator::calculate( )
+void BpmCalculator::calculate( const string& filename )
 {
     gst_init ( NULL, NULL );
 
@@ -36,7 +37,7 @@ void BpmCalculator::calculate( )
         throw;
     }
     // Set up the pipeline
-    g_object_set( G_OBJECT( mPipeline.get( ) ), "uri", "file:///home/grafov/workspace/sample.mp3", NULL );
+    g_object_set( G_OBJECT( mPipeline.get( ) ), "uri", filename.c_str( ), NULL );
 
     // Add a bus message handler
     unique_ptr< GstBus, void( * )( gpointer ) > bus(
@@ -62,7 +63,7 @@ void BpmCalculator::calculate( )
     gst_bin_add_many( GST_BIN( bin ), bpmDetector, sink, NULL );
     gst_element_link_many( bpmDetector, sink, NULL );
 
-    unique_ptr< GstPad, void( * )( gpointer) > pad( 
+    unique_ptr< GstPad, void( * )( gpointer) > pad(
         gst_element_get_static_pad ( bpmDetector, "sink" ),
         gst_object_unref );
     GstPad* ghost_pad = gst_ghost_pad_new ( "sink", pad.get( ) );
@@ -80,9 +81,10 @@ void BpmCalculator::calculate( )
     g_main_loop_run ( mLoop.get( ) );
 }
 
-BpmCalculator::BpmCalculator( )
+BpmCalculator::BpmCalculator( const CompletedCallback& cb )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
+    , mCallback( cb )
 {}
 
 BpmCalculator::~BpmCalculator( ) {
@@ -95,19 +97,25 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
         DEBUG_PRINT( DL_INFO, "End of stream\n" );
+        mCallback( calculateBpm( ) );
         g_main_loop_quit ( mLoop.get( ) );
         break;
     case GST_MESSAGE_TAG:
     {
         GstTagList *tags = NULL;
         gst_message_parse_tag ( msg, &tags );
-        DEBUG_PRINT( DL_INFO, "Got tags from element %s\n", GST_OBJECT_NAME ( msg->src ) );
+        unique_ptr< GstTagList, void( * )( GstTagList* ) > tagsPtr( tags, gst_tag_list_unref );
         gdouble bpm = 0;
-        if( gst_tag_list_get_double(tags, "beats-per-minute", &bpm ) )
+        if ( gst_tag_list_get_double(tags, "beats-per-minute", &bpm ) && bpm > 0 )
         {
-            DEBUG_PRINT( DL_INFO, "Bpm %f\n", static_cast< double >(bpm) );
+            DEBUG_PRINT( DL_INFO, "Bpm %f (%d)\n", bpm, (unsigned int)round( bpm ) );
+            auto ret = mBpmMap.insert( pair< unsigned int, unsigned int >( round( bpm ), 1 ) );
+            if ( ret.second == false )
+            {
+                //element wasn't inserted - update the element
+                ret.first->second += 1;
+            }
         }
-        gst_tag_list_free ( tags );
         break;
     }
     case GST_MESSAGE_ERROR:
@@ -123,6 +131,27 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
        break;
     }
     return TRUE;
+}
+
+unsigned int BpmCalculator::calculateBpm( )
+{
+    auto it = std::max_element
+    (
+        mBpmMap.begin( ), mBpmMap.end( ),
+        [] ( const decltype( mBpmMap )::value_type& p1, 
+             const decltype( mBpmMap )::value_type& p2 )
+            {
+                return p1.second < p2.second;
+            }
+    );
+    if ( it->second > 1 )
+    {
+        return it->first;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 

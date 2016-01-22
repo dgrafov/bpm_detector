@@ -1,5 +1,5 @@
-#ifndef DEBUG_H_
-#define DEBUG_H_
+#ifndef DEBUG_PRINT_H_
+#define DEBUG_PRINT_H_
 
 typedef enum {
     DL_INFO = 0,
@@ -11,4 +11,4 @@ void printDebugString(const char * file, int line, const char * method, DebugLev
 
 #define DEBUG_PRINT(LEVEL, FMT, ...)    printDebugString(__FILE__, __LINE__, __PRETTY_FUNCTION__, LEVEL, FMT, ##__VA_ARGS__)
 
-#endif /* DEBUG_H_ */
+#endif /* DEBUG_PRINT_H_ */

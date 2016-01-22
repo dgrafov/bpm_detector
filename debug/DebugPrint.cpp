@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include "debug.h"
+#include "DebugPrint.h"
 
 char * dlToString(DebugLevel dl) {
     static char INFO [] = "INFO";

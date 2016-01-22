@@ -4,20 +4,28 @@
 
 #include <gst/gst.h>
 #include <glib.h>
+#include <map>
 #include <memory>
+#include <functional>
 
 
 class BpmCalculator {
 public:
-    BpmCalculator( );
+    typedef std::function< void( unsigned int bpm ) > CompletedCallback;
+
+    BpmCalculator( const CompletedCallback& cb );
     ~BpmCalculator( );
-    void calculate( );
+    void calculate( const std::string& filename );
     gboolean busCallHandler( GstMessage *msg );
 
 private:
+    unsigned int calculateBpm( );
+
     std::unique_ptr< GMainLoop, void( * )( GMainLoop* ) > mLoop;
     std::unique_ptr< GstElement, void( * )( gpointer )  > mPipeline;
     guint mBusWatchId;
+    std::map< unsigned int, unsigned int > mBpmMap;
+    CompletedCallback mCallback;
 };
 
 
