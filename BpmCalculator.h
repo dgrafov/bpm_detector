@@ -1,18 +1,17 @@
 
-#ifndef PLAYER_H_
-#define PLAYER_H_
+#ifndef BPM_CALCULATOR_H_
+#define BPM_CALCULATOR_H_
 
 #include <gst/gst.h>
 #include <glib.h>
 #include <memory>
-#include <string>
 
 
-class Player {
+class BpmCalculator {
 public:
-    Player( );
-    ~Player( );
-    void startPlayer( );
+    BpmCalculator( );
+    ~BpmCalculator( );
+    void calculate( );
     gboolean busCallHandler( GstMessage *msg );
 
 private:
@@ -22,4 +21,4 @@ private:
 };
 
 
-#endif /* PLAYER_H_ */
+#endif /* BPM_CALCULATOR_H_ */

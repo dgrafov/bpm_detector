@@ -1,11 +1,8 @@
-#include "player.h"
-#include "debug/debug.h"
-#include <pthread.h>
-#include <exception>
+#include "BpmCalculator.h"
 
-int main(void) {
-    Player player;
-    player.startPlayer();    
+int main( void ) {
+    BpmCalculator calculator;
+    calculator.calculate( );    
     return 0;
 }
 

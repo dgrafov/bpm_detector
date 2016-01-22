@@ -1,5 +1,6 @@
-#include "player.h"
+#include "BpmCalculator.h"
 #include "debug/debug.h"
+
 
 #include <exception>
 #include <memory>
@@ -9,14 +10,15 @@ using namespace std;
 //Helpers
 static gboolean busCallHandlerWrapper( GstBus*, GstMessage* msg, gpointer data )
 {
-    Player * player = static_cast< Player * >( data );
-    return player->busCallHandler( msg );
+    BpmCalculator* calc = static_cast< BpmCalculator* >( data );
+    return calc->busCallHandler( msg );
 }
 
 
 //Player methods
 //TODO create init method separate from start
-void Player::startPlayer( )
+//TODO think if you really need exceptions here
+void BpmCalculator::calculate( )
 {
     gst_init ( NULL, NULL );
 
@@ -34,7 +36,7 @@ void Player::startPlayer( )
         throw;
     }
     // Set up the pipeline
-    g_object_set ( G_OBJECT( mPipeline.get( ) ), "uri", "file:///home/grafov/workspace/sample.mp3", NULL );
+    g_object_set( G_OBJECT( mPipeline.get( ) ), "uri", "file:///home/grafov/workspace/sample.mp3", NULL );
 
     // Add a bus message handler
     unique_ptr< GstBus, void( * )( gpointer ) > bus(
@@ -49,6 +51,7 @@ void Player::startPlayer( )
     GstElement* bin = gst_bin_new ( "bin" );
     GstElement* bpmDetector = gst_element_factory_make ( "bpmdetect", "detector" );
     GstElement* sink = gst_element_factory_make ( "fakesink", "sink" );
+    g_object_set( G_OBJECT( sink ), "sync", FALSE, NULL );
 
     if ( !bin || !bpmDetector || ! sink )
     {
@@ -77,19 +80,17 @@ void Player::startPlayer( )
     g_main_loop_run ( mLoop.get( ) );
 }
 
-Player::Player( )
+BpmCalculator::BpmCalculator( )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
 {}
 
-Player::~Player( ) {
+BpmCalculator::~BpmCalculator( ) {
     gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
     g_source_remove ( mBusWatchId );
 }
 
-
-
-gboolean Player::busCallHandler( GstMessage* msg )
+gboolean BpmCalculator::busCallHandler( GstMessage* msg )
 {
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
