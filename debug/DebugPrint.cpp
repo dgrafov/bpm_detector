@@ -20,6 +20,7 @@ void printDebugString(const char * file, int line, const char * method, DebugLev
     va_start(arglist, format);
     printf("%s: %s:%d:%s:", dlToString(dl), file, line, method);
     vprintf( format, arglist );
+    printf("\n");
     va_end( arglist );
 }
 
