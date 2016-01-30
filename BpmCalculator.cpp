@@ -112,6 +112,7 @@ BpmCalculator::BpmCalculator( const CompletedCallback& cb )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
     , mCallback( cb )
+    , mBpmDetect( 2, 44100 ) 
 {}
 
 BpmCalculator::~BpmCalculator( ) {

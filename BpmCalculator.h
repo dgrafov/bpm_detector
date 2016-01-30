@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include "soundtouch/BPMDetect.h"
 
 
 class BpmCalculator {
@@ -26,6 +27,7 @@ private:
     guint mBusWatchId;
     std::map< unsigned int, unsigned int > mBpmMap;
     CompletedCallback mCallback;
+    soundtouch::BPMDetect mBpmDetect;
 };
 
 
