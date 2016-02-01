@@ -8,7 +8,8 @@ void on_bpm_completed( unsigned int bpm )
 
 int main( void ) {
     BpmCalculator calculator( on_bpm_completed );
-    calculator.calculate( "file:///home/grafov/workspace/sample.mp3" );    
+    //calculator.calculate( "file:///home/grafov/workspace/sample.mp3" );    
+    calculator.calculate( "file:///home/grafov/workspace/bpm_detector/sine.wav" );    
     return 0;
 }
 

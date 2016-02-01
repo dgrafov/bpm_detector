@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <math.h>
 #include <fstream>
+#include <string.h>
+#include <stdio.h>
 
 using namespace std;
 
@@ -18,30 +20,14 @@ static gboolean busCallHandlerWrapper( GstBus*, GstMessage* msg, gpointer data )
     return calc->busCallHandler( msg );
 }
 
-//TODO clean debug
-ofstream myfile;
-
-//TODO put inside class, write a wrapper
-static GstFlowReturn new_buffer ( GstElement *sink, gpointer data ) {
-    GstSample *sample = gst_app_sink_pull_sample( GST_APP_SINK( sink ) );
-    if ( sample )
-    {
-        GstBuffer * buf = gst_sample_get_buffer( sample );
-        DEBUG_PRINT( DL_INFO, "Got buffer %d, blocks %u, time %lu",  gst_buffer_get_size(buf), gst_buffer_n_memory(buf), GST_BUFFER_PTS(buf) );
-        GstMapInfo info;
-        gst_buffer_map ( buf, &info, GST_MAP_READ );
-        guint8 *dataPtr = info.data;
-        for( gsize i = 0; i < info.size; i++ ) 
-        {
-            myfile << *( dataPtr + i );
-        }
-        gst_sample_unref( sample );
-        gst_buffer_unmap ( buf, &info );
-
-        return GST_FLOW_OK;
-    }
-    return GST_FLOW_EOS;
+static GstFlowReturn newBufferHandlerWrapper ( GstElement *sink, gpointer data ) {
+    BpmCalculator* calc = static_cast< BpmCalculator* >( data );
+    return calc->newBufferHandler( sink );
 }
+
+//TODO clean debug
+FILE * myfile;
+
 
 //Class  methods
 //TODO create init method separate from start
@@ -50,7 +36,7 @@ void BpmCalculator::calculate( const string& filename )
 {
 
     //TODO clean debug
-    myfile.open("test.wav", ios::out | ios::binary);
+    myfile = fopen ("test.wav","w");
 
     gst_init ( NULL, NULL );
 
@@ -89,7 +75,7 @@ void BpmCalculator::calculate( const string& filename )
                                         "channels", G_TYPE_INT, 2,
                                         NULL ), NULL );
 
-    g_signal_connect ( G_OBJECT( sink ), "new-sample", G_CALLBACK ( new_buffer ), NULL );
+    g_signal_connect ( G_OBJECT( sink ), "new-sample", G_CALLBACK ( newBufferHandlerWrapper ), static_cast< gpointer >( this ) );
 
     if ( !sink )
     {
@@ -112,13 +98,18 @@ BpmCalculator::BpmCalculator( const CompletedCallback& cb )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
     , mCallback( cb )
-    , mBpmDetect( 2, 44100 ) 
-{}
+    , mBpmDetect( 2, 44100 )
+    , mBufferPtr( new ( std::nothrow ) soundtouch::SAMPLETYPE [4096] ) //10 seconds TODO do a constant
+    , mBufferPos( 0 )
+{ 
+    DEBUG_PRINT(DL_INFO, "%d", sizeof(soundtouch::SAMPLETYPE));
+}
 
 BpmCalculator::~BpmCalculator( ) {
     gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
     g_source_remove ( mBusWatchId );
-    myfile.close();
+    fclose(myfile);
+    delete [] mBufferPtr;
 }
 
 
@@ -126,7 +117,8 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
 {
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
-        DEBUG_PRINT( DL_INFO, "End of stream\n" );
+        DEBUG_PRINT( DL_INFO, "End of stream" );
+        DEBUG_PRINT( DL_INFO, "Bpm: %f", mBpmDetect.getBpm( ) );
         mCallback( calculateBpm( ) );
         g_main_loop_quit ( mLoop.get( ) );
         break;
@@ -161,6 +153,39 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
        break;
     }
     return TRUE;
+}
+
+short buffer[4096];
+
+GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
+    GstSample *sample = gst_app_sink_pull_sample( GST_APP_SINK( sink ) );
+    if ( sample )
+    {
+        GstBuffer * buf = gst_sample_get_buffer( sample );
+        DEBUG_PRINT( DL_INFO, "Got buffer %d, blocks %u, time %lu",  gst_buffer_get_size(buf), gst_buffer_n_memory(buf), GST_BUFFER_PTS(buf) );
+        GstMapInfo info;
+        gst_buffer_map ( buf, &info, GST_MAP_READ );
+        guint8 *dataPtr = info.data;
+
+        memcpy( buffer, dataPtr, info.size );
+
+        //TODO clear debug
+        for( int i = 0; i < 4096; i++ )
+        {
+            DEBUG_PRINT(DL_INFO, "to file %hd", buffer[i]);
+            fprintf(myfile, "%hd", buffer[i]);
+        }
+
+//        mBpmDetect.inputSamples( buffer, 2048 );
+        
+        
+
+        gst_sample_unref( sample );
+        gst_buffer_unmap ( buf, &info );
+
+        return GST_FLOW_OK;
+    }
+    return GST_FLOW_EOS;
 }
 
 unsigned int BpmCalculator::calculateBpm( )
