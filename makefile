@@ -8,7 +8,7 @@ cpp_obj = $(addprefix $(obj_dir)/, $(notdir $(patsubst %.cpp, $(obj_dir)/%.o, $(
 cflags = `pkg-config --cflags glib-2.0 gstreamer-1.0`
 cflags += -std=c++0x -Wall
 lflags = `pkg-config --libs glib-2.0 gstreamer-1.0 `
-lflags +=   -lgstapp-1.0  -Wl,-rpath,'$$ORIGIN'
+lflags +=   -lgstapp-1.0  -laubio
 
 create_obj_dir := $(shell mkdir -p obj)
 

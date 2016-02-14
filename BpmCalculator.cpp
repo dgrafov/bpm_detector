@@ -33,10 +33,11 @@ ofstream myfile;
 //TODO think if you really need exceptions here
 void BpmCalculator::calculate( const string& filename )
 {
+    //TODO clear data here for reuse of object. Create additional function for creating pipelines and so on
+    mBpmMap.clear( );
 
     //TODO clean debug
     myfile.open("test.wav", ios::out | ios::binary);
-
     gst_init ( NULL, NULL );
 
     mPipeline.reset( gst_element_factory_make( "playbin", "pipeline" ) );
@@ -65,13 +66,13 @@ void BpmCalculator::calculate( const string& filename )
             static_cast< gpointer >( this ) ) ;
     // Create a custom sink for the playbin
     GstElement* sink = gst_element_factory_make ( "appsink", "sink" );
-    g_object_set( G_OBJECT( sink ), "sync", FALSE, 
+    g_object_set( G_OBJECT( sink ), "sync", FALSE,
                                     "emit-signals", TRUE,
                                     "caps",
                                         gst_caps_new_simple ("audio/x-raw",
-                                        "format", G_TYPE_STRING, "S16LE",
-                                        "rate", G_TYPE_INT, 44100,
-                                        "channels", G_TYPE_INT, 2,
+                                        "format", G_TYPE_STRING, sizeof( float ) == 4 ? "F32LE": "F64LE",
+                                        "rate", G_TYPE_INT, SAMPLE_RATE,
+                                        "channels", G_TYPE_INT, 1,
                                         NULL ), NULL );
 
     g_signal_connect ( G_OBJECT( sink ), "new-sample", G_CALLBACK ( newBufferHandlerWrapper ), static_cast< gpointer >( this ) );
@@ -97,13 +98,22 @@ BpmCalculator::BpmCalculator( const CompletedCallback& cb )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
     , mCallback( cb )
-{ 
+    , mAubioBpmCalculator( new_aubio_tempo( "default", WINDOW_SIZE, HOP_SIZE, SAMPLE_RATE ) )
+    , mAubioInputBuffer( new_fvec ( HOP_SIZE ) )
+    , mAubioOutputBuffer( new_fvec ( 2 ) )
+    , mAubioInputBufferSamples( 0 )
+{
 }
 
 BpmCalculator::~BpmCalculator( ) {
     gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
     g_source_remove ( mBusWatchId );
     myfile.close();
+    //TODO think of analyzing several files without recreating BPMCalculator
+    del_aubio_tempo( mAubioBpmCalculator );
+    del_fvec( mAubioInputBuffer );
+    del_fvec( mAubioOutputBuffer );
+    aubio_cleanup( );
 }
 
 
@@ -135,17 +145,53 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
     if ( sample )
     {
         GstBuffer * buf = gst_sample_get_buffer( sample );
-        DEBUG_PRINT( DL_INFO, "Got buffer %d, blocks %u, time %lu",  gst_buffer_get_size(buf), gst_buffer_n_memory(buf), GST_BUFFER_PTS(buf) );
         GstMapInfo info;
         gst_buffer_map ( buf, &info, GST_MAP_READ );
 
-        
+
         //TODO clear debug
         guint8 *dataPtr = info.data;
-        for ( gsize i = 0; i < info.size; i++ ) 
+        for ( gsize i = 0; i < info.size; i++ )
         {
             myfile << *( dataPtr + i );
         }
+        //Fill aubio input buffer
+        unsigned int samplesLeft = info.size / sizeof( float ); //size of float
+
+
+        while ( samplesLeft >= HOP_SIZE )
+        {
+            if( mAubioInputBufferSamples > 0 )
+            {
+                memcpy( mAubioInputBuffer->data + mAubioInputBufferSamples, dataPtr, ( HOP_SIZE - mAubioInputBufferSamples ) * sizeof( float ) );
+                dataPtr += ( HOP_SIZE  - mAubioInputBufferSamples ) * sizeof( float );
+                samplesLeft -= ( HOP_SIZE - mAubioInputBufferSamples );
+                mAubioInputBufferSamples = 0;
+            }
+            else
+            {
+                memcpy( mAubioInputBuffer->data, dataPtr, HOP_SIZE * sizeof( float ) );
+                dataPtr += HOP_SIZE * sizeof( float );
+                samplesLeft -= HOP_SIZE;
+            }
+
+            aubio_tempo_do( mAubioBpmCalculator, mAubioInputBuffer, mAubioOutputBuffer);
+            if ( mAubioOutputBuffer->data[ 0 ] != 0 ) 
+            {
+                unsigned int bpm = round( aubio_tempo_get_bpm( mAubioBpmCalculator ) );
+                auto ret = mBpmMap.insert( pair< unsigned int, unsigned int >( bpm, 1 ) );
+                if ( ret.second == false )
+                {
+                    (*(ret.first)).second++;
+                }
+            }
+        }
+        if ( samplesLeft > 0 )
+        {
+            memcpy( mAubioInputBuffer->data, dataPtr, samplesLeft * sizeof( float ) );
+            mAubioInputBufferSamples = samplesLeft;
+        }
+
 
         gst_sample_unref( sample );
         gst_buffer_unmap ( buf, &info );
@@ -157,7 +203,14 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
 
 unsigned int BpmCalculator::calculateBpm( )
 {
-    return 0;
+    using PairType = decltype( mBpmMap )::value_type;
+    
+    auto pair = std::max_element( mBpmMap.begin( ), mBpmMap.end( ),
+        [] ( const PairType& p1, const PairType & p2 ) 
+            {
+                return p1.second < p2.second;
+            } );
+    return pair->first;
 }
 
 

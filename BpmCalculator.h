@@ -7,10 +7,15 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <aubio/aubio.h>
 
 
 class BpmCalculator {
 public:
+    static const unsigned int SAMPLE_RATE = 44100;
+    static const unsigned int WINDOW_SIZE = 4096;
+    static const unsigned int HOP_SIZE = 128;
+
     typedef std::function< void( unsigned int bpm ) > CompletedCallback;
 
     BpmCalculator( const CompletedCallback& cb );
@@ -25,7 +30,12 @@ private:
     std::unique_ptr< GstElement, void( * )( gpointer )  > mPipeline;
     guint mBusWatchId;
     CompletedCallback mCallback;
-
+    //TODO think of using RAII
+    aubio_tempo_t* mAubioBpmCalculator;
+    fvec_t* mAubioInputBuffer;
+    fvec_t* mAubioOutputBuffer; 
+    unsigned int mAubioInputBufferSamples;
+    std::map< unsigned int, unsigned int > mBpmMap;
 };
 
 
