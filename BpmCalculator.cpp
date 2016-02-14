@@ -26,8 +26,7 @@ static GstFlowReturn newBufferHandlerWrapper ( GstElement *sink, gpointer data )
 }
 
 //TODO clean debug
-FILE * myfile;
-
+ofstream myfile;
 
 //Class  methods
 //TODO create init method separate from start
@@ -36,7 +35,7 @@ void BpmCalculator::calculate( const string& filename )
 {
 
     //TODO clean debug
-    myfile = fopen ("test.wav","w");
+    myfile.open("test.wav", ios::out | ios::binary);
 
     gst_init ( NULL, NULL );
 
@@ -98,18 +97,13 @@ BpmCalculator::BpmCalculator( const CompletedCallback& cb )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
     , mCallback( cb )
-    , mBpmDetect( 2, 44100 )
-    , mBufferPtr( new ( std::nothrow ) soundtouch::SAMPLETYPE [4096] ) //10 seconds TODO do a constant
-    , mBufferPos( 0 )
 { 
-    DEBUG_PRINT(DL_INFO, "%d", sizeof(soundtouch::SAMPLETYPE));
 }
 
 BpmCalculator::~BpmCalculator( ) {
     gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
     g_source_remove ( mBusWatchId );
-    fclose(myfile);
-    delete [] mBufferPtr;
+    myfile.close();
 }
 
 
@@ -118,28 +112,9 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
         DEBUG_PRINT( DL_INFO, "End of stream" );
-        DEBUG_PRINT( DL_INFO, "Bpm: %f", mBpmDetect.getBpm( ) );
         mCallback( calculateBpm( ) );
         g_main_loop_quit ( mLoop.get( ) );
         break;
-    case GST_MESSAGE_TAG:
-    {
-        GstTagList *tags = NULL;
-        gst_message_parse_tag ( msg, &tags );
-        unique_ptr< GstTagList, void( * )( GstTagList* ) > tagsPtr( tags, gst_tag_list_unref );
-        gdouble bpm = 0;
-        if ( gst_tag_list_get_double(tags, "beats-per-minute", &bpm ) && bpm > 0 )
-        {
-            DEBUG_PRINT( DL_INFO, "Bpm %f (%d)\n", bpm, (unsigned int)round( bpm ) );
-            auto ret = mBpmMap.insert( pair< unsigned int, unsigned int >( round( bpm ), 1 ) );
-            if ( ret.second == false )
-            {
-                //element wasn't inserted - update the element
-                ret.first->second += 1;
-            }
-        }
-        break;
-    }
     case GST_MESSAGE_ERROR:
         gchar  *debug;
         GError *error;
@@ -155,8 +130,6 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
     return TRUE;
 }
 
-short buffer[4096];
-
 GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
     GstSample *sample = gst_app_sink_pull_sample( GST_APP_SINK( sink ) );
     if ( sample )
@@ -165,20 +138,14 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
         DEBUG_PRINT( DL_INFO, "Got buffer %d, blocks %u, time %lu",  gst_buffer_get_size(buf), gst_buffer_n_memory(buf), GST_BUFFER_PTS(buf) );
         GstMapInfo info;
         gst_buffer_map ( buf, &info, GST_MAP_READ );
-        guint8 *dataPtr = info.data;
 
-        memcpy( buffer, dataPtr, info.size );
-
+        
         //TODO clear debug
-        for( int i = 0; i < 4096; i++ )
+        guint8 *dataPtr = info.data;
+        for ( gsize i = 0; i < info.size; i++ ) 
         {
-            DEBUG_PRINT(DL_INFO, "to file %hd", buffer[i]);
-            fprintf(myfile, "%hd", buffer[i]);
+            myfile << *( dataPtr + i );
         }
-
-//        mBpmDetect.inputSamples( buffer, 2048 );
-        
-        
 
         gst_sample_unref( sample );
         gst_buffer_unmap ( buf, &info );
@@ -190,23 +157,7 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
 
 unsigned int BpmCalculator::calculateBpm( )
 {
-    auto it = std::max_element
-    (
-        mBpmMap.begin( ), mBpmMap.end( ),
-        [] ( const decltype( mBpmMap )::value_type& p1, 
-             const decltype( mBpmMap )::value_type& p2 )
-            {
-                return p1.second < p2.second;
-            }
-    );
-    if ( it->second > 1 )
-    {
-        return it->first;
-    }
-    else
-    {
-        return 0;
-    }
+    return 0;
 }
 
 
