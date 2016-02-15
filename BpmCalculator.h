@@ -10,7 +10,8 @@
 #include <aubio/aubio.h>
 
 
-class BpmCalculator {
+class BpmCalculator 
+{
 public:
     static const unsigned int SAMPLE_RATE = 44100;
     static const unsigned int WINDOW_SIZE = 4096;
