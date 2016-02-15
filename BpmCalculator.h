@@ -10,7 +10,7 @@
 #include <aubio/aubio.h>
 
 
-class BpmCalculator 
+class BpmCalculator
 {
 public:
     static const unsigned int SAMPLE_RATE = 44100;
@@ -22,8 +22,8 @@ public:
     BpmCalculator( const CompletedCallback& cb );
     ~BpmCalculator( );
     void calculate( const std::string& filename );
-    gboolean busCallHandler( GstMessage *msg ); 
-    GstFlowReturn newBufferHandler ( GstElement *sink ); 
+    gboolean busCallHandler( GstMessage *msg );
+    GstFlowReturn newBufferHandler ( GstElement *sink );
 
 private:
     unsigned int calculateBpm( );
@@ -34,7 +34,7 @@ private:
     //TODO think of using RAII
     aubio_tempo_t* mAubioBpmCalculator;
     fvec_t* mAubioInputBuffer;
-    fvec_t* mAubioOutputBuffer; 
+    fvec_t* mAubioOutputBuffer;
     unsigned int mAubioInputBufferSamples;
     std::map< unsigned int, unsigned int > mBpmMap;
 };

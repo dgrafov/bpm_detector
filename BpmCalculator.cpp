@@ -176,7 +176,7 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
             }
 
             aubio_tempo_do( mAubioBpmCalculator, mAubioInputBuffer, mAubioOutputBuffer);
-            if ( mAubioOutputBuffer->data[ 0 ] != 0 ) 
+            if ( mAubioOutputBuffer->data[ 0 ] != 0 )
             {
                 unsigned int bpm = round( aubio_tempo_get_bpm( mAubioBpmCalculator ) );
                 auto ret = mBpmMap.insert( pair< unsigned int, unsigned int >( bpm, 1 ) );
@@ -204,9 +204,9 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
 unsigned int BpmCalculator::calculateBpm( )
 {
     using PairType = decltype( mBpmMap )::value_type;
-    
+
     auto pair = std::max_element( mBpmMap.begin( ), mBpmMap.end( ),
-        [] ( const PairType& p1, const PairType & p2 ) 
+        [] ( const PairType& p1, const PairType & p2 )
             {
                 return p1.second < p2.second;
             } );

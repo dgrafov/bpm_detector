@@ -6,12 +6,12 @@
 
 using namespace std;
 
-void on_bpm_completed( unsigned int bpm ) 
+void on_bpm_completed( unsigned int bpm )
 {
     DEBUG_PRINT( DL_INFO, "Bpm %d\n", bpm );
 }
 
-int main( int argc, char* argv[] ) 
+int main( int argc, char* argv[] )
 {
     if ( argc < 2 )
     {
@@ -32,11 +32,11 @@ int main( int argc, char* argv[] )
     }
     else
     {
-        cout << "Path " << argv[ 0 ] << " not found" << endl; 
+        cout << "Path " << argv[ 0 ] << " not found" << endl;
     }
-    
+
     //BpmCalculator calculator( on_bpm_completed );
-    //calculator.calculate( "file:///home/grafov/storage/workspace/sample.mp3" );    
+    //calculator.calculate( "file:///home/grafov/storage/workspace/sample.mp3" );
     return 0;
 }
 
