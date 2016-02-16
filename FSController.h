@@ -14,8 +14,9 @@ class FSController
 {
 public:
     FSController( const char * path );
-    bool getAudioFiles( std::vector< std::string >& files );
+    bool getAudioFiles( std::vector< std::string >& files ) const;
 private:
+    void getAudioFiles( const boost::filesystem::path& dirPath, std::vector< std::string >& files ) const;
     boost::filesystem::path mFullPath;
 };
 
