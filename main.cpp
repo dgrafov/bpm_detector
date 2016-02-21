@@ -6,11 +6,6 @@
 
 using namespace std;
 
-void on_bpm_completed( unsigned int bpm )
-{
-    DEBUG_PRINT( DL_INFO, "Bpm %d\n", bpm );
-}
-
 int main( int argc, char* argv[] )
 {
     if ( argc < 2 )
@@ -34,9 +29,17 @@ int main( int argc, char* argv[] )
     {
         cout << "Path " << argv[ 0 ] << " not found" << endl;
     }
+    BpmCalculator calculator;
+    if ( calculator.init( ) )
+    {
+        for( vector< string >::iterator it = files.begin( );
+             it != files.end( ); ++it )
+        {
+            unsigned int bpm = calculator.calculate( it->c_str( ) );
+            DEBUG_PRINT( DL_INFO, "File %s, bpm %d", it->c_str( ), bpm );
+        }
+    }
 
-    //BpmCalculator calculator( on_bpm_completed );
-    //calculator.calculate( "file:///home/grafov/storage/workspace/sample.mp3" );
     return 0;
 }
 

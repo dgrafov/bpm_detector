@@ -3,7 +3,6 @@
 
 #include <gst/app/gstappsink.h>
 
-#include <exception>
 #include <memory>
 #include <algorithm>
 #include <math.h>
@@ -25,19 +24,8 @@ static GstFlowReturn newBufferHandlerWrapper ( GstElement *sink, gpointer data )
     return calc->newBufferHandler( sink );
 }
 
-//TODO clean debug
-ofstream myfile;
-
-//Class  methods
-//TODO create init method separate from start
-//TODO think if you really need exceptions here
-void BpmCalculator::calculate( const string& filename )
+bool BpmCalculator::init( )
 {
-    //TODO clear data here for reuse of object. Create additional function for creating pipelines and so on
-    mBpmMap.clear( );
-
-    //TODO clean debug
-    myfile.open("test.wav", ios::out | ios::binary);
     gst_init ( NULL, NULL );
 
     mPipeline.reset( gst_element_factory_make( "playbin", "pipeline" ) );
@@ -45,16 +33,14 @@ void BpmCalculator::calculate( const string& filename )
     if ( !mLoop )
     {
         DEBUG_PRINT( DL_ERROR, "Main loop couldn't be created\n" );
-        throw;
+        return false;
     }
 
     if ( !mPipeline )
     {
         DEBUG_PRINT( DL_ERROR, "Playbin could not be created.\n" );
-        throw;
+        return false;
     }
-    // Set up the pipeline
-    g_object_set( G_OBJECT( mPipeline.get( ) ), "uri", filename.c_str( ), NULL );
 
     // Add a bus message handler
     unique_ptr< GstBus, void( * )( gpointer ) > bus(
@@ -80,39 +66,46 @@ void BpmCalculator::calculate( const string& filename )
     if ( !sink )
     {
         DEBUG_PRINT( DL_ERROR, "Custom sink for the playbin could not be created. Player not started.\n" );
-        throw;
+        return false;
     }
 
     // Set custom sink to the playbin
     g_object_set( GST_OBJECT( mPipeline.get( ) ), "audio-sink", sink, NULL );
 
+    return true;
+}
+
+
+//Class  methods
+unsigned int BpmCalculator::calculate( const string& filename )
+{
+    //Clear BPM related data
+    mBpmMap.clear( );
+
+    // Set up the pipeline
+    g_object_set( G_OBJECT( mPipeline.get( ) ), "uri", ( "file://" + filename ).c_str( ), NULL );
+
     // Start playing
     gst_element_set_state ( mPipeline.get( ), GST_STATE_PLAYING );
 
-    DEBUG_PRINT( DL_INFO, "Starting playback\n" );
-
     g_main_loop_run ( mLoop.get( ) );
+
+    return calculateBpm( );
 }
 
-BpmCalculator::BpmCalculator( const CompletedCallback& cb )
+BpmCalculator::BpmCalculator( )
     : mLoop( g_main_loop_new( NULL, FALSE ), g_main_loop_unref )
     , mPipeline( NULL, gst_object_unref )
-    , mCallback( cb )
-    , mAubioBpmCalculator( new_aubio_tempo( "default", WINDOW_SIZE, HOP_SIZE, SAMPLE_RATE ) )
-    , mAubioInputBuffer( new_fvec ( HOP_SIZE ) )
-    , mAubioOutputBuffer( new_fvec ( 2 ) )
+    , mAubioBpmCalculator( new_aubio_tempo( "default", WINDOW_SIZE, HOP_SIZE, SAMPLE_RATE ), del_aubio_tempo )
+    , mAubioInputBuffer( new_fvec ( HOP_SIZE ), del_fvec )
+    , mAubioOutputBuffer( new_fvec ( 2 ), del_fvec )
     , mAubioInputBufferSamples( 0 )
 {
 }
 
-BpmCalculator::~BpmCalculator( ) {
-    gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL);
+BpmCalculator::~BpmCalculator( )
+{
     g_source_remove ( mBusWatchId );
-    myfile.close();
-    //TODO think of analyzing several files without recreating BPMCalculator
-    del_aubio_tempo( mAubioBpmCalculator );
-    del_fvec( mAubioInputBuffer );
-    del_fvec( mAubioOutputBuffer );
     aubio_cleanup( );
 }
 
@@ -121,8 +114,7 @@ gboolean BpmCalculator::busCallHandler( GstMessage* msg )
 {
     switch ( GST_MESSAGE_TYPE ( msg ) ) {
     case GST_MESSAGE_EOS:
-        DEBUG_PRINT( DL_INFO, "End of stream" );
-        mCallback( calculateBpm( ) );
+        gst_element_set_state ( mPipeline.get( ), GST_STATE_NULL );
         g_main_loop_quit ( mLoop.get( ) );
         break;
     case GST_MESSAGE_ERROR:
@@ -148,16 +140,9 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
         GstMapInfo info;
         gst_buffer_map ( buf, &info, GST_MAP_READ );
 
-
-        //TODO clear debug
         guint8 *dataPtr = info.data;
-        for ( gsize i = 0; i < info.size; i++ )
-        {
-            myfile << *( dataPtr + i );
-        }
         //Fill aubio input buffer
-        unsigned int samplesLeft = info.size / sizeof( float ); //size of float
-
+        unsigned int samplesLeft = info.size / sizeof( float );
 
         while ( samplesLeft >= HOP_SIZE )
         {
@@ -175,10 +160,10 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
                 samplesLeft -= HOP_SIZE;
             }
 
-            aubio_tempo_do( mAubioBpmCalculator, mAubioInputBuffer, mAubioOutputBuffer);
+            aubio_tempo_do( mAubioBpmCalculator.get( ), mAubioInputBuffer.get( ), mAubioOutputBuffer.get( ) );
             if ( mAubioOutputBuffer->data[ 0 ] != 0 )
             {
-                unsigned int bpm = round( aubio_tempo_get_bpm( mAubioBpmCalculator ) );
+                unsigned int bpm = round( aubio_tempo_get_bpm( mAubioBpmCalculator.get( ) ) );
                 auto ret = mBpmMap.insert( pair< unsigned int, unsigned int >( bpm, 1 ) );
                 if ( ret.second == false )
                 {
@@ -191,7 +176,6 @@ GstFlowReturn BpmCalculator::newBufferHandler ( GstElement *sink ) {
             memcpy( mAubioInputBuffer->data, dataPtr, samplesLeft * sizeof( float ) );
             mAubioInputBufferSamples = samplesLeft;
         }
-
 
         gst_sample_unref( sample );
         gst_buffer_unmap ( buf, &info );
@@ -210,17 +194,6 @@ unsigned int BpmCalculator::calculateBpm( )
             {
                 return p1.second < p2.second;
             } );
-    return pair->first;
+    return pair->first - 1;
 }
-
-
-
-
-
-
-
-
-
-
-
 

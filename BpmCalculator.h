@@ -14,14 +14,15 @@ class BpmCalculator
 {
 public:
     static const unsigned int SAMPLE_RATE = 44100;
-    static const unsigned int WINDOW_SIZE = 4096;
-    static const unsigned int HOP_SIZE = 128;
+    static const unsigned int WINDOW_SIZE = 2048;
+    static const unsigned int HOP_SIZE = 256;
 
-    typedef std::function< void( unsigned int bpm ) > CompletedCallback;
 
-    BpmCalculator( const CompletedCallback& cb );
+    BpmCalculator( );
     ~BpmCalculator( );
-    void calculate( const std::string& filename );
+    unsigned int calculate( const std::string& filename );
+    bool init( );
+
     gboolean busCallHandler( GstMessage *msg );
     GstFlowReturn newBufferHandler ( GstElement *sink );
 
@@ -30,11 +31,9 @@ private:
     std::unique_ptr< GMainLoop, void( * )( GMainLoop* ) > mLoop;
     std::unique_ptr< GstElement, void( * )( gpointer )  > mPipeline;
     guint mBusWatchId;
-    CompletedCallback mCallback;
-    //TODO think of using RAII
-    aubio_tempo_t* mAubioBpmCalculator;
-    fvec_t* mAubioInputBuffer;
-    fvec_t* mAubioOutputBuffer;
+    std::unique_ptr< aubio_tempo_t, void( * )( aubio_tempo_t* ) > mAubioBpmCalculator;
+    std::unique_ptr< fvec_t, void( * )( fvec_t* ) > mAubioInputBuffer;
+    std::unique_ptr< fvec_t, void( * )( fvec_t* ) > mAubioOutputBuffer;
     unsigned int mAubioInputBufferSamples;
     std::map< unsigned int, unsigned int > mBpmMap;
 };
