@@ -194,6 +194,6 @@ unsigned int BpmCalculator::calculateBpm( )
             {
                 return p1.second < p2.second;
             } );
-    return pair->first - 1;
+    return pair->first - 1; //TODO hack is here - for some unknown reason aubio bpm is usually bigger, than reference one.
 }
 

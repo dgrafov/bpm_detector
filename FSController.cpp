@@ -59,6 +59,11 @@ bool FSController::getAudioFiles( std::vector< std::string >& files ) const
     return true;
 }
 
+string FSController::getFullPath( ) const
+{
+    return mFullPath.string( );
+}
+
 void FSController::getAudioFiles( const path& dirPath, vector< string >& files ) const
 {
     directory_iterator endIter;
