@@ -8,6 +8,8 @@
 #include <sstream>
 #include <stdlib.h>
 
+#define DEBUG_FILES
+
 using namespace std;
 
 int main( int argc, char* argv[] )
@@ -29,9 +31,8 @@ int main( int argc, char* argv[] )
     switch( argc )
     {
     case 2:
-        cout << "Creating playlist for all files in folder: " << path << endl;
-        cout << "(BPM of each song will be printed to the console output)" << endl;
-        plsPath += "/playlist.m3u";
+        cout << "Creating list of all files in folder: " << path << " with their BPMs" << endl;
+        plsPath += "/all_files.txt";
         break;
     case 3:
         refBpm = atoi( argv[ 2 ] );
@@ -49,16 +50,31 @@ int main( int argc, char* argv[] )
         break;
     }
 
+#ifdef DEBUG_FILES
+        ofstream allFiles;
+        allFiles.open( "all_files.txt" );
+        ofstream goodFiles;
+        goodFiles.open( "good_files.txt" );
+        ofstream badFiles;
+        badFiles.open( "bad_files.txt" );
+#endif
+
     FSController fsc( path.c_str( ) );
 
     vector< string > files;
     if( fsc.getAudioFiles( files ) )
     {
+
+
         DEBUG_PRINT( DL_INFO, "Files found:" );
         for ( auto it = files.begin( ); it != files.end( ); ++it )
         {
             DEBUG_PRINT( DL_INFO, "%s", it->c_str( ) );
+#ifdef DEBUG_FILES
+            allFiles << *it << endl;
+#endif
         }
+
         DEBUG_PRINT( DL_INFO, "" );
     }
     else
@@ -101,13 +117,29 @@ int main( int argc, char* argv[] )
                     pls << relativePath << endl;
                 }
             }
-            else
+            else if ( bpm > 0 )
             {
                 cout << *it << ": " << bpm << endl;
-                pls << relativePath << endl;
+                pls << relativePath << ": " << bpm << endl;
             }
+
+#ifdef DEBUG_FILES
+            if ( bpm > 0 )
+            {
+                goodFiles << *it << ": " << bpm << endl;
+            }
+            else
+            {
+                badFiles << *it << endl;
+            }
+#endif
         }
         pls.close( );
+#ifdef DEBUG_FILES
+        allFiles.close( );
+        goodFiles.close( );
+        badFiles.close( );
+#endif
     }
 
     return 0;
