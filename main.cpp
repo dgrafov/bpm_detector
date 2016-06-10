@@ -95,17 +95,20 @@ int main( int argc, char* argv[] )
         {
             int bpm = calculator.calculate( *it );
             string relativePath = it->substr( fullPathLength );
+
             //TODO do acquisition of a relative path in a proper platform-independent way inside FSController
             if ( relativePath[ 0 ] == '/' )
             {
                 relativePath = relativePath.substr( 1 );
             }
 
+            bool print = false;
+
             if ( refBpm != -1 )
             {
                 if ( bpm == refBpm )
                 {
-                    cout << *it << ": " << bpm << endl;
+                    print = true;
                     pls << relativePath << endl;
                 }
             }
@@ -113,14 +116,19 @@ int main( int argc, char* argv[] )
             {
                 if ( bpm >= refBpmRangeStart && bpm <= refBpmRangeEnd )
                 {
-                    cout << *it << ": " << bpm << endl;
+                    print = true;
                     pls << relativePath << endl;
                 }
             }
             else if ( bpm > 0 )
             {
-                cout << *it << ": " << bpm << endl;
+                print = true;
                 pls << relativePath << ": " << bpm << endl;
+            }
+
+            if ( print )
+            {
+                cout << "(" << it - files.begin( ) << " of " << files.size( ) << ") " << *it << ": " << bpm << endl;
             }
 
 #ifdef DEBUG_FILES
@@ -134,12 +142,6 @@ int main( int argc, char* argv[] )
             }
 #endif
         }
-        pls.close( );
-#ifdef DEBUG_FILES
-        allFiles.close( );
-        goodFiles.close( );
-        badFiles.close( );
-#endif
     }
 
     return 0;
